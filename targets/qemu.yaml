@@ -1,0 +1,9 @@
+target_id: qemu
+host: 127.0.0.1
+port: 22222
+user: qnxuser
+key_path: ~/.config/qnx-mcp/qemu/client_ed25519
+known_hosts: ~/.config/qnx-mcp/qemu/known_hosts
+arch: x86_64
+read_roots:
+  - /data/home/qnxuser/qnx-mcp-demo

@@ -1,0 +1,78 @@
+# Manual verification
+
+The public test suite uses invented fixtures and a fake backend. The
+opt-in target check requires a running QNX guest and a text file you staged
+under a configured read root. It makes real calls through an SDK stdio client
+and prints only pass/fail summaries:
+
+```sh
+uv run --frozen python scripts/manual_target_check.py \
+  --profile "$work/qemu.local.yaml" \
+  --audit-log "$work/audit/check.jsonl" \
+  --file /data/home/qnxuser/qnx-mcp-demo/peer_b.c \
+  --contains 'late MsgReply'
+```
+
+Run [the sample](../examples/deadlock_demo/README.md) and use
+`--process-name peer_ --expect-wait-states --buffer-set qnx_mcp_peer_b` while the
+faulty pair is alive. Check that the observed PID/channel values match the
+sample's handshake output and that the idle receiver is on a different channel.
+Verify the fixed run manually. The SDK check does not start programs, configure
+guest permissions, or substitute for the GUI approval check in [clients.md](clients.md).
+
+The WSL2 acceptance used the Linux SDP 8.0 installation with 8.0.5 components,
+QEMU 8.2.2 with the local AVX2 mask, `qnxuser`, and MCP Python SDK 2.3.0. The
+non-root test observed SEND/REPLY peer PIDs, connection and channel details with
+`%80B`, and RECEIVE channel IDs on two same-UID processes. Cross-UID process
+visibility remains limited. The combined `slog2info -f -s -t` layout and Unix
+epoch time basis were checked against the guest clock. Real-target evidence
+remains outside Git. Record the actual client and toolchain versions when
+repeating the check.
+
+The VS Code 1.142.0 GUI approval check passed on November 5, 2026, with the
+Local harness, Default permissions and the workspace policy in
+[clients.md](clients.md). The test used `system_info({})` over the Windows
+`wsl.exe` stdio bridge to the real QEMU guest.
+
+| GUI action | New server audit requests | Result |
+| --- | --- | --- |
+| Decline the pre-call prompt with Skip | 0 | Client reported the denial and stopped. |
+| Approve the first call once | 1 | One successful result. |
+| Approve a second call in the same conversation once | 1 | A new pre-call prompt appeared before the second request. |
+
+Both result reviews used Allow Once. Private checkpoints verified distinct
+request IDs and one successful result per accepted call. Counts retain a
+separate initial call that the default Copilot harness automatically approved
+before the workspace policy was added. The table describes the subsequent
+Local harness checks. Raw audit records and target observations stay outside
+the repository.
+
+The Claude Desktop 4.16336.0 (Microsoft Store) approval check passed on
+November 6, 2026, in **Manual** permission mode. It used a temporary local MCP
+entry, the same `wsl.exe` bridge, a separate audit log and `system_info({})`
+against the real QEMU guest. All three actions happened in one conversation.
+
+| GUI action | New server audit requests | Result |
+| --- | --- | --- |
+| Decline the approval card | 0 | Client showed `Didn't run`; no request reached the server. |
+| Allow the first call once | 1 | One successful result. |
+| Allow a second call once | 1 | A new approval card appeared before the second request. |
+
+No request was logged while each card was pending. The two accepted calls had
+distinct request IDs and `ok` results. A control call in the default **Auto**
+mode ran without a prompt; the counts above exclude it. The chat used Haiku
+5.5. The temporary entry was removed from the desktop configuration afterwards.
+
+The same VS Code Local harness diagnosed the live deadlock in a fresh chat.
+Twelve QNX calls were approved individually. The agent found A's main thread
+REPLY-blocked on B, B's main thread SEND-blocked on A's callback channel and
+A's idle thread RECEIVE-blocked on a separate channel. It used B's phase log
+and staged source to locate the callback `MsgSend` before the late `MsgReply`.
+Check source statements when reviewing the diagnosis. The first answer gave
+inaccurate line numbers, and the follow-up cited the correct statements.
+
+The developer reran the fixed branch over SSH and checked exit code zero.
+The agent read the saved `DEMO_OK` marker and found no remaining peers in the
+account-visible process list. The named slog2 buffers returned no entries
+after exit. The [sample instructions](../examples/deadlock_demo/README.md)
+reproduce the approval window and the manual rerun.

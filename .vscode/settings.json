@@ -1,0 +1,8 @@
+{
+  "chat.tools.eligibleForAutoApproval": {
+    "system_info": false,
+    "list_processes": false,
+    "read_system_log": false,
+    "read_file": false
+  }
+}

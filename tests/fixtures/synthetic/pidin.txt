@@ -1,0 +1,6 @@
+pid | tid | prio | STATE | Blocked | name
+701 | 1 | 12r | REPLY | responder(804) 901s-3-47s | /data/demo/peer one
+701 | 2 | 10r | RECEIVE | 6 | /data/demo/peer one
+804 | 1 | 9f | SEND | caller(701) 902s-2-56s | /data/demo/peer two
+960 | 1 | 7r | REPLY | clipped endpoint(42 | /data/demo/unknown
+967 | 1 | 6r | FUTURE_STATE | | /data/demo/future

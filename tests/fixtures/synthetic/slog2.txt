@@ -1,0 +1,4 @@
+1700000800.015   fixture_a.701   phases*   2   110   5   first synthetic event
+   second line of the original message
+1700000800.021   fixture_a.701   phases    2   111   3   synthetic warning
+1700000800.070   fixture_b.804   steps     1   120   7   synthetic debug event
