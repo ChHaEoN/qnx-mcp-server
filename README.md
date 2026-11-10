@@ -55,7 +55,7 @@ only the local x86_64 setup has been validated for this release.
 | Tool | Inputs | Evidence |
 | --- | --- | --- |
 | `system_info` | None | QNX release/machine, CPU and approximate memory from `uname` and `pidin info`; observed SFTP availability. |
-| `list_processes` | Optional `pid`, executable substring `name`, thread `limit` | PID/TID, scheduling state, priority, observed IPC peer/channel IDs and a wait-for analysis. |
+| `list_processes` | Optional `pid`, executable substring `name`, thread `limit` | PID/TID, scheduling state, priority, observed IPC peer/channel IDs, wait-for analysis. |
 | `read_system_log` | Optional `buffer_set`, `pid`, `severity_max`, `since_epoch_ms`, `until_epoch_ms`, `limit` | Bounded `slog2info -f -s -t` snapshot, filtered locally. Lower severity numbers are more urgent. |
 | `read_file` | Absolute `path`, optional byte `offset` and `max_bytes` | Bounded UTF-8 text from a regular file under an approved root. Follow `next_offset` for subsequent pages. |
 
