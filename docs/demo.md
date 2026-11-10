@@ -1,4 +1,4 @@
-# QEMU fallback video script — 2:40
+# Demo video script — 2:40
 
 | Time | Show |
 | --- | --- |
@@ -13,3 +13,4 @@ Use permitted functional evidence and original code. Keep QNX images,
 binaries, SDK content, vendor samples, credentials and captures out of the
 repo and video. Do not show benchmark or timing comparisons. This script does
 not claim a video has been recorded or published.
+<!-- TODO: replace with the video link once the video is public. -->

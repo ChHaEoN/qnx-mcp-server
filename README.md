@@ -75,9 +75,24 @@ assistant can connect those observations to the callback-before-reply line in
 the source. The developer reruns in `--fixed` mode to demonstrate that
 reply-before-callback completes the request.
 
+Illustrative, from the synthetic fixture: trimmed `list_processes` data for
+[pidin.txt](tests/fixtures/synthetic/pidin.txt), with A as PID 701 and B as PID 804.
+
+```json
+{"processes": [
+  {"pid": 701, "threads": [
+    {"tid": 1, "state": "REPLY", "blocked_on": {"peer_pid": 804, "peer_tid": null, "channel_id": 3}},
+    {"tid": 2, "state": "RECEIVE", "blocked_on": {"channel_id": 6}}]},
+  {"pid": 804, "threads": [
+    {"tid": 1, "state": "SEND", "blocked_on": {"peer_pid": 701, "peer_tid": null, "channel_id": 2}}]}]}
+```
+
+A's thread 1 waits for B's reply; B's thread 1 waits for A to receive on channel 2.
+A's thread 2 is idle on channel 6, and `peer_tid` stays null because `pidin` gives only the PID.
+
 [Manual verification](docs/manual-testing.md) describes the tested QEMU path
 and the separate SDK-free checks. [Demo storyboard](docs/demo.md) is a recording
-script; no demo video is bundled.
+script; no demo video is bundled. <!-- TODO: replace with the video link once the video is public. -->
 
 ## Safety
 
@@ -103,8 +118,8 @@ uv build --wheel --no-sources
 
 Public CI uses Linux and hand-written synthetic fixtures with a fake SSH/SFTP
 backend. It does not use QNX, credentials or target captures. Real target
-validation is a separate opt-in check. [PLAN.md](PLAN.md) tracks the later cloud
-scenario; it is outside this release.
+validation is a separate opt-in check. [ROADMAP.md](ROADMAP.md) lists what this
+release covers and the planned two-guest scenario.
 
 Original code is [MIT licensed](LICENSE). QNX software, images, SDK files,
 vendor samples and target captures are not distributed. Obtain vendor
