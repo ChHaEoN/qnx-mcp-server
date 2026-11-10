@@ -27,6 +27,7 @@ from .schemas import (
     SystemData,
 )
 from .transport import Command, CommandResult, Session
+from .waits import analyze_waits
 
 Record = Callable[..., None]
 _PERMISSION = re.compile("operation not permitted|permission denied|access denied", re.I)
@@ -157,15 +158,20 @@ async def list_processes(
             break
     if capped:
         warnings.append("Thread limit reached; refine the filters for more detail")
+    returned = {(proc.pid, thread.tid) for proc in filtered for thread in proc.threads}
+    analysis = analyze_waits(processes, returned)
+    if analysis.truncated:
+        warnings.append("Wait analysis reached its size limit; refine the filters")
     return result_for(
         profile,
         ProcessData(
             processes=filtered,
             returned_threads=args.limit - remaining,
             permission_denied=len(_PERMISSION.findall(raw.stderr)),
+            wait_analysis=analysis,
         ),
         warnings,
-        raw.truncated or capped,
+        raw.truncated or capped or analysis.truncated,
     )
 
 

@@ -55,7 +55,7 @@ only the local x86_64 setup has been validated for this release.
 | Tool | Inputs | Evidence |
 | --- | --- | --- |
 | `system_info` | None | QNX release/machine, CPU and approximate memory from `uname` and `pidin info`; observed SFTP availability. |
-| `list_processes` | Optional `pid`, executable substring `name`, thread `limit` | PID/TID, scheduling state, priority, and observed IPC peer/channel IDs. |
+| `list_processes` | Optional `pid`, executable substring `name`, thread `limit` | PID/TID, scheduling state, priority, observed IPC peer/channel IDs and a wait-for analysis. |
 | `read_system_log` | Optional `buffer_set`, `pid`, `severity_max`, `since_epoch_ms`, `until_epoch_ms`, `limit` | Bounded `slog2info -f -s -t` snapshot, filtered locally. Lower severity numbers are more urgent. |
 | `read_file` | Absolute `path`, optional byte `offset` and `max_bytes` | Bounded UTF-8 text from a regular file under an approved root. Follow `next_offset` for subsequent pages. |
 
@@ -89,6 +89,9 @@ Illustrative, from the synthetic fixture: trimmed `list_processes` data for
 
 A's thread 1 waits for B's reply; B's thread 1 waits for A to receive on channel 2.
 A's thread 2 is idle on channel 6, and `peer_tid` stays null because `pidin` gives only the PID.
+
+The [instrument-cluster freeze](examples/cluster_freeze/README.md) simulates a
+cockpit whose radar fault freezes the whole cluster.
 
 [Manual verification](docs/manual-testing.md) describes the tested QEMU path
 and the separate SDK-free checks. [Demo storyboard](docs/demo.md) is a recording

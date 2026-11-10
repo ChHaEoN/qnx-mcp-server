@@ -57,8 +57,10 @@ TOOLS = {
         Envelope[SystemData],
     ),
     "list_processes": ToolSpec(
-        "Read account-visible QNX threads and IPC wait evidence. "
-        "Peer TID and hidden processes may be unavailable.",
+        "Read account-visible QNX threads and IPC wait evidence, plus a wait-for analysis "
+        "that follows the returned threads' waits through the visible snapshot: edges with "
+        "observed/inferred/possible candidate threads, ranked terminal waits and candidate "
+        "cycles. Peer TIDs are never invented; hidden processes are not followed.",
         ProcessArgs,
         Envelope[ProcessData],
     ),
