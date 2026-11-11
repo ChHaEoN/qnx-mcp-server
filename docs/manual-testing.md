@@ -111,5 +111,18 @@ owner. The parser keeps the reported text, and the analysis treats it as MUTEX.
 `use pidin` on the guest does not explain the question mark. The launcher's
 `waitpid` appeared as REPLY to `procnto` (PID 1), which `qnxuser` cannot inspect.
 Slog2 entries carry thread IDs, so the logs, not `pidin`, show which fusion
-thread held `state_lock`. No assistant chat was run against this sample yet.
-Raw snapshots stay outside the repository.
+thread held `state_lock`. Raw snapshots stay outside the repository.
+
+Later on November 10, an assistant received the sample's prompt and only the four
+tools through a stdio client, without the sample README or local sources. It
+reported the lock held across the unbounded `MsgSend` and proposed the
+bounded-wait fix, and its source citations matched the staged files. It had to
+guess file names, and narrow log reads with `pid` and `until_epoch_ms`, because
+heartbeats crowded the fusion buffer set and every marker was INFO.
+
+On November 11 the sample moved heartbeats to `qnx_mcp_cluster_heartbeat` and
+logged faults at warning severity, and the prompt now names the files and
+buffer sets. A rerun on the same guest returned the radar's `front end lost`
+entry with `severity_max` 3, only phase markers from `qnx_mcp_cluster_fusion`,
+and the fixed run's timeouts at severity 3. No GUI client chat has been run
+against this sample yet.

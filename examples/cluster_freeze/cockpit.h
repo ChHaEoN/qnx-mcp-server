@@ -38,7 +38,7 @@ struct cockpit_msg {
     int32_t objects;
 };
 
-static slog2_buffer_t phase_log, heartbeat_log;
+static slog2_buffer_t phase_log;
 
 static inline void fail(const char *operation)
 {
@@ -46,28 +46,34 @@ static inline void fail(const char *operation)
     exit(EXIT_FAILURE);
 }
 
-static inline void log_init(const char *buffer_set)
+/* One buffer set per stream, so a buffer-set filter is not flooded by heartbeats. */
+static inline slog2_buffer_t register_log(const char *buffer_set, const char *buffer_name)
 {
     slog2_buffer_set_config_t cfg = {0};
-    slog2_buffer_t buffers[2];
+    slog2_buffer_t buffer;
     cfg.buffer_set_name = buffer_set;
-    cfg.num_buffers = 2;
+    cfg.num_buffers = 1;
     cfg.verbosity_level = SLOG2_INFO;
-    cfg.buffer_config[0].buffer_name = "phase";
+    cfg.buffer_config[0].buffer_name = buffer_name;
     cfg.buffer_config[0].num_pages = 1;
-    cfg.buffer_config[1].buffer_name = "heartbeat";
-    cfg.buffer_config[1].num_pages = 1;
-    if (slog2_register(&cfg, buffers, 0) == -1) fail("slog2_register");
-    phase_log = buffers[0];
-    heartbeat_log = buffers[1];
+    if (slog2_register(&cfg, &buffer, 0) == -1) fail("slog2_register");
+    return buffer;
 }
 
-/* Phase markers carry request IDs so separate processes can be correlated. */
-#define note(code, ...)                                                     \
+static inline void log_init(const char *buffer_set)
+{
+    phase_log = register_log(buffer_set, "phase");
+}
+
+/* Phase markers carry request IDs so separate processes can be correlated.
+ * Faults use SLOG2_WARNING so a severity filter finds them among the INFO markers. */
+#define note_at(severity, code, ...)                                        \
     do {                                                                    \
-        if (slog2f(phase_log, (code), SLOG2_INFO, __VA_ARGS__) == -1)       \
+        if (slog2f(phase_log, (code), (severity), __VA_ARGS__) == -1)       \
             fail("slog2f");                                                 \
     } while (0)
+#define note(code, ...) note_at(SLOG2_INFO, code, __VA_ARGS__)
+#define warn_note(code, ...) note_at(SLOG2_WARNING, code, __VA_ARGS__)
 
 static inline int number(const char *text)
 {

@@ -60,11 +60,18 @@ The display's watchdog defaults to 30 seconds and ends a frozen run. Services
 stop 3 seconds later and the launcher 5 seconds later. For interactive
 approvals, add `-DWATCHDOG_SECONDS=900` to every build; 900 is the limit.
 
+The staging directory is inside the profile's read root. A snapshot guest
+discards it on exit, so create it after every boot:
+
+```sh
+ssh -F "$work/ssh.conf" qnx-mcp-demo 'mkdir -p /data/home/qnxuser/qnx-mcp-demo/cluster'
+```
+
 Use the [lab SSH configuration](../../docs/qemu.md) and SFTP to upload the five
 binaries, the five C files and `cockpit.h` to
-`/data/home/qnxuser/qnx-mcp-demo/cluster`, inside the profile's read root. Make
-the binaries executable. Run the launcher from that directory, because it starts
-`./radar_svc` and the other programs by relative path.
+`/data/home/qnxuser/qnx-mcp-demo/cluster`. Make the binaries executable. Run the
+launcher from that directory, because it starts `./radar_svc` and the other
+programs by relative path.
 
 ## Diagnose the freeze
 
@@ -87,9 +94,15 @@ leave the sources out of the attachments and approve each read:
 
 > The instrument cluster stopped updating: `cluster_display` repeats its last
 > frame while `vehicle_fusion` keeps logging heartbeats. Diagnose it using only
-> the QNX MCP tools. The staged sources are in
-> `/data/home/qnxuser/qnx-mcp-demo/cluster`. Separate observed thread states from
-> inferences and cite the source statements.
+> the QNX MCP tools. The sources `cluster_display.c`, `radar_svc.c`,
+> `vehicle_fusion.c` and `cockpit.h` are staged in
+> `/data/home/qnxuser/qnx-mcp-demo/cluster`. The programs log to the slog2
+> buffer sets `qnx_mcp_cluster_display`, `qnx_mcp_cluster_fusion`,
+> `qnx_mcp_cluster_radar` and `qnx_mcp_cluster_heartbeat`. Separate observed
+> thread states from inferences and cite the source statements.
+
+`read_file` cannot list a directory, so the prompt names the files and buffer
+sets.
 
 `list_processes` with name `cluster_display` returns the display threads and a
 `wait_analysis` that follows their waits into the other processes. It ranks the
@@ -97,9 +110,11 @@ radar's `RECEIVE` and `CONDVAR` threads first as untimed waits, and the
 heartbeat's `NANOSLEEP` last because it wakes by itself. Candidate threads are
 marked `possible`: `pidin` names the peer process, not the peer thread, and gives
 no MUTEX owner. `read_system_log` with buffer sets `qnx_mcp_cluster_fusion` and
-`qnx_mcp_cluster_radar` links the request IDs. Its thread IDs show which fusion
-thread logged `sent while holding state_lock` and which logged
-`waiting for state_lock`. They also show the radar's `front end lost` marker.
+`qnx_mcp_cluster_radar` links the request IDs. Heartbeats go to their own buffer
+set, so they do not push these phase markers out of a bounded read. The entries'
+thread IDs show which fusion thread logged `sent while holding state_lock` and
+which logged `waiting for state_lock`. Faults are logged at warning severity, so
+`severity_max` 3 on the radar buffer set returns the `front end lost` marker.
 `read_file` on `vehicle_fusion.c` shows `sync_radar_holding_lock`. The mutex owner
 comes from those logs and the source, not from `pidin`.
 

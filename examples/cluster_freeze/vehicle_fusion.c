@@ -6,6 +6,7 @@ static int speed_kph = 48;          /* protected by state_lock */
 static int adas = ADAS_STARTING;    /* protected by state_lock */
 static int objects;                 /* protected by state_lock */
 static int radar_coid;
+static slog2_buffer_t heartbeat_log;
 
 static int request_objects(uint32_t id, struct cockpit_msg *reply, const uint64_t *deadline_ns)
 {
@@ -47,7 +48,7 @@ static void sync_radar_with_deadline(uint32_t id)
     objects = rc == -1 ? 0 : reply.objects;
     pthread_mutex_unlock(&state_lock);
     if (rc == -1)
-        note(23, "radar object request %u timed out; ADAS marked unavailable", id);
+        warn_note(23, "radar object request %u timed out; ADAS marked unavailable", id);
     else
         note(21, "radar object request %u answered", id);
 }
@@ -87,6 +88,7 @@ int main(int argc, char **argv)
     static int fixed;
     fixed = strcmp(argv[4], "fixed") == 0;
     log_init("qnx_mcp_cluster_fusion");
+    heartbeat_log = register_log("qnx_mcp_cluster_heartbeat", "heartbeat");
 
     radar_coid = ConnectAttach(0, radar_pid, radar_chid, _NTO_SIDE_CHANNEL, 0);
     if (radar_coid == -1) fail("connect to radar_svc");

@@ -19,7 +19,8 @@ static void *front_end(void *unused)
         pthread_mutex_lock(&radar_lock);
         if (lose_frontend && frame == FRONTEND_LOSS_FRAME) {
             frontend_ok = 0;
-            note(35, "radar front end lost after frame %u; waiting for re-initialisation", frame);
+            warn_note(35, "radar front end lost after frame %u; waiting for re-initialisation",
+                      frame);
         }
         while (!frontend_ok) pthread_cond_wait(&frontend_changed, &radar_lock);
         int deliver = frame_wanted;
@@ -72,8 +73,8 @@ int main(int argc, char **argv)
         msg.adas = ADAS_READY;
         msg.objects = 2;
         if (MsgReply(rcvid, 0, &msg, sizeof(msg)) == -1)
-            note(32, "object request %u: requester no longer waiting (errno %d)", msg.request_id,
-                 errno);
+            warn_note(32, "object request %u: requester no longer waiting (errno %d)",
+                      msg.request_id, errno);
         else
             note(31, "object request %u answered from radar frame %d", msg.request_id,
                  pulse.value.sival_int);
