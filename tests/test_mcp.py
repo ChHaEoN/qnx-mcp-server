@@ -12,7 +12,7 @@ from qnx_mcp.config import TargetProfile
 from qnx_mcp.server import create_server
 from qnx_mcp.transport import Command, CommandResult, Entry
 
-from .fakes import FakeBackend
+from .fakes import FakeBackend, fixture
 
 
 @pytest.fixture
@@ -46,7 +46,31 @@ async def test_contract_partial_process_data_and_local_filter(setup):
     assert data["data"]["permission_denied"] == 1
     assert data["data"]["returned_threads"] == 1
     assert data["data"]["processes"][0]["threads"][0]["blocked_on"]["peer_pid"] == 804
+    assert data["schema_version"] == "1.1"
+    waits = data["data"]["wait_analysis"]
+    assert waits["blocked_threads"] == 1
+    assert [(e["source"]["pid"], e["candidate_basis"]) for e in waits["edges"]] == [
+        (701, "inferred"),
+        (804, "possible"),
+    ]
+    assert waits["cycles"][0]["basis"] == "possible"
     assert backend.commands == [Command.PROCESSES]
+
+
+async def test_wait_analysis_follows_a_filtered_display_into_other_processes(setup):
+    backend, profile, audit = setup
+    backend.results[Command.PROCESSES] = CommandResult(fixture("pidin_cluster.txt"))
+    async with Client(create_server(profile, audit, backend)) as client:
+        result = await client.call_tool("list_processes", {"name": "display"})
+    data = result.structured_content["data"]
+    assert {p["pid"] for p in data["processes"]} == {340}
+    ends = data["wait_analysis"]["ends"]
+    assert [(e["thread"]["pid"], e["kind"]) for e in ends] == [
+        (310, "untimed_wait"),
+        (310, "untimed_wait"),
+        (320, "self_resolving"),
+    ]
+    assert ends[0]["executable"] == "/data/demo/sensor"
 
 
 async def test_validation_and_denials_audited_before_network(setup):

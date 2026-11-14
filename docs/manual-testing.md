@@ -20,6 +20,12 @@ sample's handshake output and that the idle receiver is on a different channel.
 Verify the fixed run manually. The SDK check does not start programs, configure
 guest permissions, or substitute for the GUI approval check in [clients.md](clients.md).
 
+For the [instrument-cluster freeze](../examples/cluster_freeze/README.md), run the
+check while the faulty cockpit is frozen with `--process-name cluster_display
+--buffer-set qnx_mcp_cluster_fusion --expect-end-in radar_svc`, and point
+`--file` at the staged `vehicle_fusion.c`. The last option requires the
+top-ranked `wait_analysis` end to be an untimed wait in `radar_svc`.
+
 The WSL2 acceptance used the Linux SDP 8.0 installation with 8.0.5 components,
 QEMU 8.2.2 with the local AVX2 mask, `qnxuser`, and MCP Python SDK 2.3.0. The
 non-root test observed SEND/REPLY peer PIDs, connection and channel details with
@@ -76,3 +82,47 @@ The agent read the saved `DEMO_OK` marker and found no remaining peers in the
 account-visible process list. The named slog2 buffers returned no entries
 after exit. The [sample instructions](../examples/deadlock_demo/README.md)
 reproduce the approval window and the manual rerun.
+
+## Instrument-cluster freeze
+
+The [cluster sample](../examples/cluster_freeze/README.md) was checked on
+November 10, 2026, on the same QEMU guest and `qnxuser` account, with a
+temporary key and a separate audit log. All five programs built with
+`qcc -Vgcc_ntox86_64 -Wall -Wextra -Werror`, using both the default watchdog and
+`-DWATCHDOG_SECONDS=900`.
+
+| Run | Operator result | SDK stdio check |
+| --- | --- | --- |
+| Default fault | Panel froze at frame 3; `DEMO_HANG` after the display watchdog. | All four tools passed; the top `wait_analysis` end was `radar_svc` in `RECEIVE`. |
+| `--fixed` | 12 frames; later frames showed ADAS unavailable; `DEMO_OK`. | Read `fixed-run.txt` with its `DEMO_OK` marker. |
+| `--healthy` | 12 frames with live radar data; `DEMO_OK`. | Read `healthy-run.txt` with its `DEMO_OK` marker. |
+
+During the freeze, `list_processes` for `cluster_display` reported three blocked
+display threads and followed them through `vehicle_fusion` to `radar_svc`. The
+radar's `RECEIVE` and `CONDVAR` threads ranked first, and the heartbeat's
+`NANOSLEEP` thread ranked last. There were no cycles. All candidate threads were
+`possible`, except the observed JOIN target. The fixed run's fusion log showed
+the 2-second deadline expiring, confirming that `TimerTimeout` returned
+`ETIMEDOUT` to `MsgSend`. A later radar request was SEND-blocked and also
+timed out.
+
+This guest printed the MUTEX state as `MUTEX?`, with a hexadecimal sync ID and no
+owner. The parser keeps the reported text, and the analysis treats it as MUTEX.
+`use pidin` on the guest does not explain the question mark. The launcher's
+`waitpid` appeared as REPLY to `procnto` (PID 1), which `qnxuser` cannot inspect.
+Slog2 entries carry thread IDs, so the logs, not `pidin`, show which fusion
+thread held `state_lock`. Raw snapshots stay outside the repository.
+
+Later on November 10, an assistant received the sample's prompt and only the four
+tools through a stdio client, without the sample README or local sources. It
+reported the lock held across the unbounded `MsgSend` and proposed the
+bounded-wait fix, and its source citations matched the staged files. It had to
+guess file names, and narrow log reads with `pid` and `until_epoch_ms`, because
+heartbeats crowded the fusion buffer set and every marker was INFO.
+
+On November 11 the sample moved heartbeats to `qnx_mcp_cluster_heartbeat` and
+logged faults at warning severity, and the prompt now names the files and
+buffer sets. A rerun on the same guest returned the radar's `front end lost`
+entry with `severity_max` 3, only phase markers from `qnx_mcp_cluster_fusion`,
+and the fixed run's timeouts at severity 3. No GUI client chat has been run
+against this sample yet.

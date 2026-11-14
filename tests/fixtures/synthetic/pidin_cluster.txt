@@ -1,0 +1,12 @@
+pid | tid | prio | STATE | Blocked | name
+300 | 1 | 10r | REPLY | procnto(1) 0s-1-9s | /data/demo/launcher
+310 | 1 | 10r | RECEIVE | 2 | /data/demo/sensor
+310 | 2 | 10r | CONDVAR | (0x1000) | /data/demo/sensor
+320 | 1 | 10r | MUTEX? | 5a5a00 | /data/demo/fusion
+320 | 2 | 10r | REPLY | sensor(310) 2s-1-4s | /data/demo/fusion
+320 | 3 | 10r | NANOSLEEP | | /data/demo/fusion
+330 | 1 | 10r | RECEIVE | 1 | /data/demo/idle server
+330 | 2 | 10r | RECEIVE | 1 | /data/demo/idle server
+340 | 1 | 10r | JOIN | 2 | /data/demo/display
+340 | 2 | 10r | REPLY | fusion(320) 2s-1-3s | /data/demo/display
+340 | 3 | 10r | SEND | fusion(320) 3s-1-3s | /data/demo/display

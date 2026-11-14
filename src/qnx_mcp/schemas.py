@@ -72,7 +72,7 @@ class SystemData(BaseModel):
 
 
 class BlockedOn(BaseModel):
-    kind: Literal["peer", "channel", "other", "none"]
+    kind: Literal["peer", "channel", "thread", "other", "none"]
     availability: Literal["observed", "unknown", "not_applicable"]
     peer_pid: int | None = None
     peer_tid: int | None = None
@@ -96,11 +96,59 @@ class Process(BaseModel):
     threads: list[Thread]
 
 
+class ThreadRef(BaseModel):
+    pid: int
+    tid: int | None = None
+
+
+Basis = Literal["observed", "inferred", "possible"]
+
+
+class WaitEdge(BaseModel):
+    """One thread's wait: the target process from pidin plus the threads that could release it."""
+
+    source: ThreadRef
+    relation: Literal["send", "reply", "mutex", "join"]
+    target_pid: int
+    target_tid: int | None = None
+    target_visible: bool
+    channel_id: int | None = None
+    candidates: list[int] = Field(default_factory=list)
+    candidate_basis: Basis | None = None
+
+
+class WaitEnd(BaseModel):
+    """A wait that the analysis cannot follow further, ranked by how many waits lead to it."""
+
+    thread: ThreadRef
+    executable: str | None = None
+    state: str | None = None
+    blocked: str = ""
+    kind: Literal["untimed_wait", "self_resolving", "not_visible", "unresolved"]
+    dependents: int
+    reached_without_possible: bool
+
+
+class WaitGroup(BaseModel):
+    threads: list[ThreadRef]
+    basis: Basis
+
+
+class WaitAnalysis(BaseModel):
+    blocked_threads: int = 0
+    edges: list[WaitEdge] = Field(default_factory=list)
+    ends: list[WaitEnd] = Field(default_factory=list)
+    cycles: list[WaitGroup] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    truncated: bool = False
+
+
 class ProcessData(BaseModel):
     processes: list[Process]
     returned_threads: int
     visibility: Literal["account_limited"] = "account_limited"
     permission_denied: int = 0
+    wait_analysis: WaitAnalysis = Field(default_factory=WaitAnalysis)
 
 
 class LogEntry(BaseModel):
@@ -132,7 +180,7 @@ class FileData(BaseModel):
 
 
 class Envelope[T: BaseModel](BaseModel):
-    schema_version: Literal["1.0"] = "1.0"
+    schema_version: Literal["1.1"] = "1.1"
     target_id: str
     observed_at: datetime
     status: Literal["ok", "partial"]

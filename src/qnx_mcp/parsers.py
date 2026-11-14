@@ -12,7 +12,8 @@ THREAD_HEADER = ["pid", "tid", "prio", "STATE", "Blocked", "name"]
 _PEER = re.compile(r".+\((\d{1,10})\)\s+(\d{1,10})s?-(\d{1,10})-(\d{1,10})s?")
 _NUMBER = re.compile(r"\d{1,10}")
 _PRIORITY = re.compile(r"(\d{1,3})([a-zA-Z]?)")
-_STATE = re.compile(r"[A-Z][A-Z0-9_-]{0,31}")
+# The verified QEMU guest prints some states with a trailing "?" (for example "MUTEX?").
+_STATE = re.compile(r"[A-Z][A-Z0-9_-]{0,31}\??")
 _LOG = re.compile(
     r"^(\d{1,12}(?:\.\d{1,9})?)\s+(\S+)\s+(\S+)\s+(\d{1,10})\s+"
     r"(\d{1,10})\s+([0-7])(?:[ \t]+(.*))?$"
@@ -60,8 +61,18 @@ def parse_info(text: str) -> tuple[int | None, str | None, Memory]:
     return len(cpu) or None, next(iter(models)) if len(models) == 1 else None, memory
 
 
+def base_state(state: str) -> str:
+    """The state name without pidin's trailing qualifier; the reported text is kept elsewhere."""
+    return state.removesuffix("?")
+
+
 def parse_blocked(state: str, raw: str) -> BlockedOn:
     display = safe_text(raw)
+    state = base_state(state)
+    if state == "JOIN":
+        if _NUMBER.fullmatch(raw):
+            return BlockedOn(kind="thread", availability="observed", peer_tid=int(raw), raw=display)
+        return BlockedOn(kind="thread", availability="unknown", raw=display)
     if state in {"SEND", "REPLY"}:
         if m := _PEER.fullmatch(raw):
             peer, coid, channel, scoid = map(int, m.groups())

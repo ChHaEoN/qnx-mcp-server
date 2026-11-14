@@ -56,6 +56,19 @@ async def verify(args: argparse.Namespace) -> None:
             }
             if not {"SEND", "REPLY", "RECEIVE"} <= observed:
                 raise RuntimeError("Expected observable SEND, REPLY and RECEIVE states")
+        if args.expect_end_in:
+            waits = processes["wait_analysis"]
+            top = waits["ends"][0] if waits["ends"] else None
+            if (
+                top is None
+                or top["kind"] != "untimed_wait"
+                or args.expect_end_in not in (top["executable"] or "")
+            ):
+                raise RuntimeError("Expected the top-ranked wait end in the named process")
+            print(
+                f"PASS wait analysis ({waits['blocked_threads']} blocked threads; top end "
+                f"{top['state']} with {top['dependents']} dependents)"
+            )
         log_args = {"limit": 10}
         if args.buffer_set:
             log_args["buffer_set"] = args.buffer_set
@@ -80,6 +93,9 @@ def main() -> None:
     parser.add_argument("--process-name", help="Optional executable substring")
     parser.add_argument("--buffer-set", help="Optional slog2 buffer-set name")
     parser.add_argument("--expect-wait-states", action="store_true")
+    parser.add_argument(
+        "--expect-end-in", help="Executable substring expected for the top-ranked wait end"
+    )
     asyncio.run(verify(parser.parse_args()))
 
 
