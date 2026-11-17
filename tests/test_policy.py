@@ -37,6 +37,16 @@ def test_config_rejects_ambiguous_or_broad_policy(tmp_path: Path):
         TargetProfile(user="root")
 
 
+def test_sample_profiles_load_for_both_architectures():
+    targets = Path(__file__).resolve().parents[1] / "targets"
+    profiles = {p.name: load_profile(p) for p in sorted(targets.glob("*.yaml"))}
+    assert {name: p.arch for name, p in profiles.items()} == {
+        "qemu-aarch64.yaml": "aarch64",
+        "qemu.yaml": "x86_64",
+    }
+    assert len({p.port for p in profiles.values()}) == len(profiles)
+
+
 def test_command_template_quotes_format_and_trusted_utility_path():
     p = TargetProfile.model_validate({"utilities": {"pidin": "/an absolute/command;name"}})
     assert command_line(p, Command.PROCESSES) == (

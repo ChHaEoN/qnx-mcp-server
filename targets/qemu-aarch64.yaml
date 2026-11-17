@@ -1,0 +1,9 @@
+target_id: qemu-aarch64
+host: 127.0.0.1
+port: 22223
+user: qnxuser
+key_path: ~/.config/qnx-mcp/qemu-aarch64/client_ed25519
+known_hosts: ~/.config/qnx-mcp/qemu-aarch64/known_hosts
+arch: aarch64
+read_roots:
+  - /data/home/qnxuser/qnx-mcp-demo
