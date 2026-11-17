@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from qnx_mcp.transport import Command, CommandResult, Entry
 
@@ -22,6 +22,7 @@ class FakeFiles:
         self.contents: dict[str, bytes] = {}
         self.canonical: dict[str, str] = {}
         self.reads: list[tuple[str, int, int]] = []
+        self.listings: list[str] = []
         self.add("/data/demo/probe.txt", b"original synthetic marker\n")
 
     def add(self, path: str, content: bytes) -> None:
@@ -37,6 +38,16 @@ class FakeFiles:
     async def read(self, path: str, offset: int, size: int) -> bytes:
         self.reads.append((path, offset, size))
         return self.contents[path][offset : offset + size]
+
+    async def listdir(self, path: str, limit: int) -> tuple[list[tuple[str, Entry]], bool]:
+        """Children in insertion order, like an unsorted readdir, stopping after the limit."""
+        self.listings.append(path)
+        children = [
+            (PurePosixPath(p).name, e)
+            for p, e in self.entries.items()
+            if PurePosixPath(p).parent == PurePosixPath(path) and p != path
+        ]
+        return children[:limit], len(children) > limit
 
 
 class FakeBackend:

@@ -7,6 +7,7 @@ import asyncssh
 import pytest
 from mcp import Client, StdioServerParameters
 
+from qnx_mcp import tools
 from qnx_mcp.audit import AuditLog
 from qnx_mcp.config import TargetProfile
 from qnx_mcp.server import create_server
@@ -46,7 +47,7 @@ async def test_contract_partial_process_data_and_local_filter(setup):
     assert data["data"]["permission_denied"] == 1
     assert data["data"]["returned_threads"] == 1
     assert data["data"]["processes"][0]["threads"][0]["blocked_on"]["peer_pid"] == 804
-    assert data["schema_version"] == "1.1"
+    assert data["schema_version"] == "1.2"
     waits = data["data"]["wait_analysis"]
     assert waits["blocked_threads"] == 1
     assert [(e["source"]["pid"], e["candidate_basis"]) for e in waits["edges"]] == [
@@ -116,6 +117,111 @@ async def test_sftp_metadata_checks_and_utf8_boundary(setup):
     audit_text = audit.path.read_text()
     assert "/data/demo/pages.txt" not in audit_text
     assert all("content" not in json.loads(line) for line in audit_text.splitlines())
+
+
+async def test_directory_listing_is_sorted_paged_and_never_follows_links(setup, monkeypatch):
+    backend, profile, audit = setup
+    files = backend.filesystem
+    files.entries["/data/demo/sub"] = Entry("directory")
+    files.add("/data/demo/sub/inner.c", b"int inner;\n")
+    files.add("/data/demo/a.c", b"abc")
+    files.add("/data/demo/bad\x1bname", b"x")
+    monkeypatch.setattr(tools, "DIRECTORY_PAGE", 3)
+    async with Client(create_server(profile, audit, backend)) as client:
+        # The approved root itself may be listed, although it may not be read as a file.
+        first = await client.call_tool("read_file", {"path": "/data/demo"})
+        second = await client.call_tool("read_file", {"path": "/data/demo", "offset": 3})
+        nested = await client.call_tool("read_file", {"path": "/data/demo/sub"})
+    page = first.structured_content["data"]
+    assert first.structured_content["status"] == "partial"
+    assert (page["kind"], page["content"], page["bytes_read"]) == ("directory", "", 0)
+    assert (page["next_offset"], page["eof"], page["total_entries"]) == (3, False, 6)
+    assert page["first_line"] is None
+    assert [(e["name"], e["type"], e["size"]) for e in page["entries"]] == [
+        ("a.c", "file", 3),
+        ("bad\\u001bname", "file", 1),
+        ("fifo", "other", None),
+    ]
+    rest = second.structured_content["data"]
+    assert [(e["name"], e["type"], e["size"]) for e in rest["entries"]] == [
+        ("link", "symlink", None),
+        ("probe.txt", "file", 26),
+        ("sub", "directory", None),
+    ]
+    assert (rest["next_offset"], rest["eof"]) == (None, True)
+    assert not second.structured_content["truncated"]
+    assert [e["name"] for e in nested.structured_content["data"]["entries"]] == ["inner.c"]
+    assert not files.reads
+    audit_text = audit.path.read_text()
+    assert "probe.txt" not in audit_text and "inner.c" not in audit_text
+
+
+async def test_directory_containment_and_scan_cap(setup, monkeypatch):
+    backend, profile, audit = setup
+    files = backend.filesystem
+    files.entries["/data/demo/sub"] = Entry("directory")
+    files.entries["/data/demo/other"] = Entry("directory")
+    files.canonical["/data/demo/other"] = "/data/else"
+    async with Client(create_server(profile, audit, backend)) as client:
+        assert error_code(await client.call_tool("read_file", {"path": "/data"})) == "path_denied"
+        assert not backend.connections
+        for path in ("link", "other"):
+            denied = await client.call_tool("read_file", {"path": f"/data/demo/{path}"})
+            assert error_code(denied) == "path_denied"
+        assert not files.listings
+        monkeypatch.setattr(tools, "DIRECTORY_SCAN_LIMIT", 2)
+        capped = await client.call_tool("read_file", {"path": "/data/demo"})
+    result = capped.structured_content
+    assert result["truncated"] and result["data"]["total_entries"] is None
+    assert len(result["data"]["entries"]) == 2 and not result["data"]["eof"]
+    assert any("more than 2 entries" in w for w in result["warnings"])
+
+
+async def test_file_reads_report_first_line_and_number_lines_on_request(setup, monkeypatch):
+    backend, profile, audit = setup
+    files = backend.filesystem
+    files.add("/data/demo/lines.c", b"one\ntwo\nthree\n")
+    path = "/data/demo/lines.c"
+    async with Client(create_server(profile, audit, backend)) as client:
+        whole = (await client.call_tool("read_file", {"path": path})).structured_content["data"]
+        middle = await client.call_tool("read_file", {"path": path, "offset": 5})
+        numbered = await client.call_tool(
+            "read_file", {"path": path, "offset": 4, "line_numbers": True}
+        )
+        partial = await client.call_tool(
+            "read_file", {"path": path, "max_bytes": 6, "line_numbers": True}
+        )
+        monkeypatch.setattr(tools, "LINE_SCAN_CHUNK", 3)
+        chunked = await client.call_tool("read_file", {"path": path, "offset": 8})
+        monkeypatch.setattr(tools, "LINE_SCAN_LIMIT", 4)
+        beyond = await client.call_tool(
+            "read_file", {"path": path, "offset": 8, "line_numbers": True}
+        )
+    assert (whole["kind"], whole["content"], whole["first_line"]) == (
+        "file",
+        "one\ntwo\nthree\n",
+        1,
+    )
+    assert not whole["numbered"] and whole["entries"] is None
+    assert middle.structured_content["data"]["content"] == "wo\nthree\n"
+    assert middle.structured_content["data"]["first_line"] == 2
+    data = numbered.structured_content["data"]
+    assert (data["content"], data["numbered"], data["first_line"]) == (
+        "     2\ttwo\n     3\tthree\n",
+        True,
+        2,
+    )
+    assert partial.structured_content["data"]["content"] == "     1\tone\n     2\ttw"
+    assert chunked.structured_content["data"]["first_line"] == 3
+    assert [r for r in files.reads if r[1] < 8 and r[0] == path][-3:] == [
+        (path, 0, 3),
+        (path, 3, 3),
+        (path, 6, 2),
+    ]
+    far = beyond.structured_content
+    assert (far["data"]["content"], far["data"]["first_line"]) == ("three\n", None)
+    assert not far["data"]["numbered"]
+    assert any("line number" in w.lower() for w in far["warnings"])
 
 
 async def test_log_filters_use_epoch_and_severity_boundaries(setup):

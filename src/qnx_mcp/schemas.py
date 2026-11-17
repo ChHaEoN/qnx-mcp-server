@@ -44,8 +44,18 @@ class LogArgs(Input):
 
 class FileArgs(Input):
     path: str = Field(min_length=1, max_length=1024)
-    offset: int = Field(default=0, ge=0, le=2**53 - 1)
-    max_bytes: int = Field(default=16_384, ge=4, le=65_536)
+    offset: int = Field(
+        default=0,
+        ge=0,
+        le=2**53 - 1,
+        description="Byte offset for a file; entry index for a directory listing",
+    )
+    max_bytes: int = Field(default=16_384, ge=4, le=65_536, description="File pages only")
+    line_numbers: bool = Field(
+        default=False,
+        description="Prefix each returned file line with its number, like cat -n; "
+        "the default returns the exact text",
+    )
 
 
 class Memory(BaseModel):
@@ -170,17 +180,30 @@ class LogData(BaseModel):
     entries: list[LogEntry]
 
 
+class DirectoryEntry(BaseModel):
+    name: str
+    type: Literal["file", "directory", "symlink", "other"]
+    size: int | None = None
+
+
 class FileData(BaseModel):
+    """A file page, or one page of a sorted directory listing when kind is "directory"."""
+
     path: str
+    kind: Literal["file", "directory"] = "file"
     content: str
     encoding: Literal["utf-8"] = "utf-8"
     bytes_read: int
+    first_line: int | None = None
+    numbered: bool = False
     next_offset: int | None
     eof: bool
+    entries: list[DirectoryEntry] | None = None
+    total_entries: int | None = None
 
 
 class Envelope[T: BaseModel](BaseModel):
-    schema_version: Literal["1.1"] = "1.1"
+    schema_version: Literal["1.2"] = "1.2"
     target_id: str
     observed_at: datetime
     status: Literal["ok", "partial"]
