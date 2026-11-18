@@ -48,6 +48,10 @@ utilities; confirm them on your own image. Copy the
 [aarch64 profile](../targets/qemu-aarch64.yaml) to `$work/qemu-aarch64.local.yaml`
 and set `key_path: keys/client_ed25519` and `known_hosts: keys/known_hosts`.
 
+The guest's `uname -m` names the board, `QEMU_virt`, as the x86_64 guest's
+names `x86pc`. The server reads the architecture from `uname -p`, which
+prints `aarch64le`, and `system_info` reports it as `aarch64`.
+
 Build the samples with `qcc -Vgcc_ntoaarch64le` instead of `-Vgcc_ntox86_64`.
 The rest of each demo is unchanged.
 

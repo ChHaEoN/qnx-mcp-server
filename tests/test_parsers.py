@@ -1,9 +1,75 @@
 import pytest
 
 from qnx_mcp.errors import ToolFailure
-from qnx_mcp.parsers import parse_logs, parse_processes, parse_uname
+from qnx_mcp.parsers import parse_info, parse_logs, parse_processes, parse_uname
 
-from .fakes import fixture
+from .fakes import SYSTEM_OUTPUT, fixture
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("QNX 8.0.0 x86pc x86_64\n", ("8.0.0", "x86pc", "x86_64")),
+        ("QNX 8.0.0 Imaginary_virt aarch64le\n", ("8.0.0", "Imaginary_virt", "aarch64")),
+        ("QNX 8.0.2 Fictional_board aarch64le", ("8.0.2", "Fictional_board", "aarch64")),
+    ],
+)
+def test_uname_takes_the_architecture_from_the_processor_not_the_board(text, expected):
+    assert parse_uname(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "code"),
+    [
+        ("QNX 8.0.0 x86pc\n", "parse_error"),
+        ("QNX 8.0.0 Imaginary_virt aarch64be", "unsupported_target"),
+        ("QNX 8.0.0 Imaginary_virt arm64", "unsupported_target"),
+        ("QNX 7.1.0 x86pc x86_64", "unsupported_target"),
+    ],
+)
+def test_uname_rejects_unvalidated_processors_and_layouts(text, code):
+    with pytest.raises(ToolFailure) as caught:
+        parse_uname(text)
+    assert caught.value.code == code
+
+
+@pytest.mark.parametrize("arch", ["x86_64", "aarch64"])
+def test_pidin_info_on_both_architectures(arch):
+    count, model, memory = parse_info(SYSTEM_OUTPUT[arch][1])
+    assert count == 2
+    assert model == {"x86_64": "Fictional Model", "aarch64": "Fictional-A7"}[arch]
+    assert memory.total_bytes and memory.free_bytes and memory.approximate
+
+
+def test_aarch64_wait_rows_and_log_layout():
+    processes, notes = parse_processes(fixture("pidin_aarch64.txt"))
+    assert not notes
+    panel, service = processes
+    assert (panel.pid, panel.executable, service.executable) == (
+        2203651,
+        "./shift_panel",
+        "./gear_svc",
+    )
+    reply, receive = panel.threads
+    assert (reply.blocked_on.peer_pid, reply.blocked_on.channel_id) == (2207748, 1)
+    assert receive.blocked_on.channel_id == 2
+    send, mutex, condvar, sleep = service.threads
+    assert send.blocked_on.peer_pid == 2203651
+    assert (mutex.state, mutex.blocked_on.kind, mutex.blocked_on.raw) == (
+        "MUTEX?",
+        "other",
+        "3a1f00c00c",
+    )
+    assert condvar.blocked_on.raw == "(0x31ab7e9010)"
+    assert sleep.blocked_on.kind == "none"
+    logs, notes = parse_logs(fixture("slog2_aarch64.txt"))
+    assert not notes
+    assert [(e.pid, e.buffer_set, e.severity) for e in logs] == [
+        (2203651, "shift_panel", 5),
+        (2207748, "gear_svc", 5),
+        (2207748, "gear_svc", 3),
+    ]
+    assert logs[0].oldest and logs[2].message == "callback still pending"
 
 
 def test_ipc_fields_do_not_invent_a_peer_tid():
@@ -38,7 +104,7 @@ def test_wrong_format_does_not_look_like_empty_success():
     with pytest.raises(ToolFailure, match="epoch records"):
         parse_logs("Nov 04 not the selected epoch format\n")
     with pytest.raises(ToolFailure, match="recognized QNX"):
-        parse_uname("Linux 8.0.0 x86_64")
+        parse_uname("Linux 8.0.0 x86pc x86_64")
 
 
 def test_log_order_owner_and_multiline():

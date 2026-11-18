@@ -23,16 +23,12 @@ LOG_MESSAGE_LIMIT = 2048
 
 
 def parse_uname(text: str) -> tuple[str, str, str]:
+    """`uname -m` names the board (x86pc, QEMU_virt, ...); `-p` names the processor."""
     fields = text.strip().split()
-    if len(fields) != 3:
-        raise ToolFailure("parse_error", "Unexpected uname -srm layout")
-    os_name, release, machine = fields
-    arch = {
-        "x86pc": "x86_64",
-        "x86_64": "x86_64",
-        "aarch64": "aarch64",
-        "arm64": "aarch64",
-    }.get(machine.lower())
+    if len(fields) != 4:
+        raise ToolFailure("parse_error", "Unexpected uname -srmp layout")
+    os_name, release, machine, processor = fields
+    arch = {"x86_64": "x86_64", "aarch64le": "aarch64"}.get(processor)
     if os_name != "QNX" or not re.fullmatch(r"8\.0(?:\.\d+)?", release) or arch is None:
         raise ToolFailure("unsupported_target", "Expected a recognized QNX 8.0 target")
     return release, machine, arch

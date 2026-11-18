@@ -30,7 +30,7 @@ class Command(StrEnum):
 def command_line(profile: TargetProfile, command: Command) -> str:
     utilities = profile.utilities
     argv = {
-        Command.UNAME: (utilities.uname, "-srm"),
+        Command.UNAME: (utilities.uname, "-srmp"),
         Command.INFO: (utilities.pidin, "info"),
         Command.PROCESSES: (utilities.pidin, "-v", "-F", PIDIN_FORMAT),
         Command.LOG: (utilities.slog2info, "-f", "-s", "-t"),
