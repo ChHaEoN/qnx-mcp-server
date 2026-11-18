@@ -126,3 +126,20 @@ buffer sets. A rerun on the same guest returned the radar's `front end lost`
 entry with `severity_max` 3, only phase markers from `qnx_mcp_cluster_fusion`,
 and the fixed run's timeouts at severity 3. No GUI client chat has been run
 against this sample yet.
+
+## aarch64 QEMU virt guest
+
+On November 19, 2026, both samples were rebuilt with
+`qcc -Vgcc_ntoaarch64le -Wall -Wextra -Werror` and run on the
+[aarch64 guest](qemu-aarch64.md) as `qnxuser`, with a temporary key and a host
+key checked against the serial console. The operator read `pidin` and
+`slog2info` directly over SSH:
+
+| Run | Operator result |
+| --- | --- |
+| Deadlock fault | A's main thread REPLY-blocked on B, B's main thread SEND-blocked on A, and A's idle thread in `RECEIVE`; both phase markers logged; the watchdog ended the run. |
+| Deadlock `--fixed` | `DEMO_OK` and exit code zero. |
+| Cluster fault | Display threads waited on `vehicle_fusion`, fusion was REPLY-blocked on `radar_svc`, and the radar sat in `RECEIVE` and `CONDVAR`; `DEMO_HANG` after the display watchdog. |
+| Cluster `--fixed` and `--healthy` | `DEMO_OK` and exit code zero. |
+
+The wait graph matched the x86_64 guest. This guest also printed `MUTEX?`.

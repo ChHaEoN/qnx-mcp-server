@@ -23,6 +23,8 @@ for p in a b; do
 done
 ```
 
+For the [aarch64 guest](../../docs/qemu-aarch64.md), use `-Vgcc_ntoaarch64le`.
+
 For interactive approvals, add `-DWATCHDOG_SECONDS=900` to both builds. Each
 process has its own watchdog. The default is 30 seconds and the compile-time
 limit is 900 seconds.

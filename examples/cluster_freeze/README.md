@@ -56,6 +56,8 @@ for p in radar_svc vehicle_fusion cluster_display diag_svc cockpit_launch; do
 done
 ```
 
+For the [aarch64 guest](../../docs/qemu-aarch64.md), use `-Vgcc_ntoaarch64le`.
+
 The display's watchdog defaults to 30 seconds and ends a frozen run. Services
 stop 3 seconds later and the launcher 5 seconds later. For interactive
 approvals, add `-DWATCHDOG_SECONDS=900` to every build; 900 is the limit.
