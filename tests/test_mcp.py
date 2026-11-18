@@ -193,6 +193,8 @@ async def test_host_key_and_utility_failure_are_distinct(setup):
         assert error_code(bad) == "host_key_mismatch"
         assert "client-facing" not in str(bad.structured_content)
         backend.connect_error = None
+        backend.results[Command.PROCESSOR] = CommandResult("", "not found", 127)
+        assert error_code(await client.call_tool("system_info")) == "utility_unavailable"
         backend.results[Command.UNAME] = CommandResult("", "not found", 127)
         assert error_code(await client.call_tool("system_info")) == "utility_unavailable"
 

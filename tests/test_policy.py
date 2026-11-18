@@ -52,4 +52,5 @@ def test_command_template_quotes_format_and_trusted_utility_path():
     assert command_line(p, Command.PROCESSES) == (
         "LC_ALL=C '/an absolute/command;name' -v -F '%a|%b|%p|%J|%80B|%n'"
     )
-    assert command_line(p, Command.UNAME) == "LC_ALL=C /system/bin/uname -srmp"
+    assert command_line(p, Command.UNAME) == "LC_ALL=C /system/bin/uname -srm"
+    assert command_line(p, Command.PROCESSOR) == "LC_ALL=C /system/bin/uname -p"

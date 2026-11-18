@@ -7,35 +7,37 @@ from .fakes import SYSTEM_OUTPUT, fixture
 
 
 @pytest.mark.parametrize(
-    ("text", "expected"),
+    ("text", "processor", "expected"),
     [
-        ("QNX 8.0.0 x86pc x86_64\n", ("8.0.0", "x86pc", "x86_64")),
-        ("QNX 8.0.0 Imaginary_virt aarch64le\n", ("8.0.0", "Imaginary_virt", "aarch64")),
-        ("QNX 8.0.2 Fictional_board aarch64le", ("8.0.2", "Fictional_board", "aarch64")),
+        ("QNX 8.0.0 x86pc\n", "x86_64\n", ("8.0.0", "x86pc", "x86_64")),
+        ("QNX 8.0.0 Imaginary_virt\n", "aarch64le\n", ("8.0.0", "Imaginary_virt", "aarch64")),
+        ("QNX 8.0.2 Fictional_board", "aarch64le", ("8.0.2", "Fictional_board", "aarch64")),
     ],
 )
-def test_uname_takes_the_architecture_from_the_processor_not_the_board(text, expected):
-    assert parse_uname(text) == expected
+def test_uname_takes_the_architecture_from_the_processor_not_the_board(text, processor, expected):
+    assert parse_uname(text, processor) == expected
 
 
 @pytest.mark.parametrize(
-    ("text", "code"),
+    ("text", "processor", "code"),
     [
-        ("QNX 8.0.0 x86pc\n", "parse_error"),
-        ("QNX 8.0.0 Imaginary_virt aarch64be", "unsupported_target"),
-        ("QNX 8.0.0 Imaginary_virt arm64", "unsupported_target"),
-        ("QNX 7.1.0 x86pc x86_64", "unsupported_target"),
+        ("QNX 8.0.0 x86pc x86_64", "x86_64", "parse_error"),
+        ("QNX 8.0.0 x86pc", "x86_64 extra", "parse_error"),
+        ("QNX 8.0.0 x86pc", "", "parse_error"),
+        ("QNX 8.0.0 Imaginary_virt", "aarch64be", "unsupported_target"),
+        ("QNX 8.0.0 Imaginary_virt", "arm64", "unsupported_target"),
+        ("QNX 7.1.0 x86pc", "x86_64", "unsupported_target"),
     ],
 )
-def test_uname_rejects_unvalidated_processors_and_layouts(text, code):
+def test_uname_rejects_unvalidated_processors_and_layouts(text, processor, code):
     with pytest.raises(ToolFailure) as caught:
-        parse_uname(text)
+        parse_uname(text, processor)
     assert caught.value.code == code
 
 
 @pytest.mark.parametrize("arch", ["x86_64", "aarch64"])
 def test_pidin_info_on_both_architectures(arch):
-    count, model, memory = parse_info(SYSTEM_OUTPUT[arch][1])
+    count, model, memory = parse_info(SYSTEM_OUTPUT[arch][2])
     assert count == 2
     assert model == {"x86_64": "Fictional Model", "aarch64": "Fictional-A7"}[arch]
     assert memory.total_bytes and memory.free_bytes and memory.approximate
@@ -104,7 +106,7 @@ def test_wrong_format_does_not_look_like_empty_success():
     with pytest.raises(ToolFailure, match="epoch records"):
         parse_logs("Nov 04 not the selected epoch format\n")
     with pytest.raises(ToolFailure, match="recognized QNX"):
-        parse_uname("Linux 8.0.0 x86pc x86_64")
+        parse_uname("Linux 8.0.0 x86pc", "x86_64")
 
 
 def test_log_order_owner_and_multiline():
