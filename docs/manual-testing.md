@@ -140,3 +140,10 @@ added to its directory:
 - A page of `vehicle_fusion.c` that starts at a line boundary reported the same
   `first_line` as the local copy. `line_numbers` numbered the page from there.
 - The audit log contained no entry names, paths or file contents.
+
+On November 19, 2026, the same checks passed on the aarch64 QEMU virt guest
+with the aarch64 build of the cluster sample. The listing sizes matched the local
+binaries and sources, and a listing `offset` of 5 started at the sixth name. A
+mid-line offset reported the line that contains it. On this branch alone,
+`system_info` still rejects that guest as `unsupported_target`, because the
+`uname -p` change for aarch64 is not here yet.
