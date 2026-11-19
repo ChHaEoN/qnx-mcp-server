@@ -1,0 +1,7 @@
+     pid|tid|prio|STATE         |Blocked                         |name
+ 2203651|  1| 10r|REPLY         |gear_svc(2207748) 2s-1-1s       |./shift_panel
+ 2203651|  2| 10r|RECEIVE       |2                               |./shift_panel
+ 2207748|  1| 10r|SEND          |shift_panel(2203651) 2s-1-1s    |./gear_svc
+ 2207748|  2| 10r|MUTEX?        |3a1f00c00c                      |./gear_svc
+ 2207748|  3| 10r|CONDVAR       |(0x31ab7e9010)                  |./gear_svc
+ 2207748|  4| 10r|NANOSLEEP     |                                |./gear_svc

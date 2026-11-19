@@ -3,6 +3,7 @@
 Keep this setup outside the repository. Install a licensed Linux QNX SDP 8.0
 toolchain and QEMU on an x86_64 Linux development host or WSL2. This setup uses
 the SDK's [mkqnximage](https://www.qnx.com/developers/docs/8.0/com.qnx.doc.neutrino.utilities/topic/m/mkqnximage.html).
+For the second validated target, see [the aarch64 QEMU virt guest](qemu-aarch64.md).
 Use an existing verified image or generate a fresh one in an empty directory:
 
 ```sh

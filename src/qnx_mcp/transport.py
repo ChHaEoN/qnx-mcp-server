@@ -22,6 +22,7 @@ LOG_LIMIT = 1024 * 1024
 
 class Command(StrEnum):
     UNAME = "uname"
+    PROCESSOR = "uname_processor"
     INFO = "pidin_info"
     PROCESSES = "pidin_threads"
     LOG = "slog2_snapshot"
@@ -30,7 +31,9 @@ class Command(StrEnum):
 def command_line(profile: TargetProfile, command: Command) -> str:
     utilities = profile.utilities
     argv = {
+        # QNX uname prints -p with no separating space after other fields, so ask for it alone.
         Command.UNAME: (utilities.uname, "-srm"),
+        Command.PROCESSOR: (utilities.uname, "-p"),
         Command.INFO: (utilities.pidin, "info"),
         Command.PROCESSES: (utilities.pidin, "-v", "-F", PIDIN_FORMAT),
         Command.LOG: (utilities.slog2info, "-f", "-s", "-t"),

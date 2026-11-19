@@ -17,16 +17,17 @@ receiver from a real dependency cycle. [QNX message passing](https://www.qnx.com
 MCP client ── stdio ── Linux / WSL2 qnx-mcp ── verified SSH/SFTP ── QNX 8.0
 ```
 
-The supported MVP target is **QEMU x86_64**. The tested host uses
-**Ubuntu 24.04 WSL2**, **Python 3.12**, and the Linux **QNX SDP 8.0 series with
-8.0.5 components**. The guest reports `QNX 8.0.0 x86pc` through `uname`.
-The original demo uses `qcc -Vgcc_ntox86_64`. The MCP process itself needs no
-SDK, compiler, AWS credentials, or application-side LLM key.
+Validated: **x86_64 QEMU** and **aarch64 QEMU (virt)**. Both guests run on one
+**Ubuntu 24.04 WSL2** host with **Python 3.12** and the Linux **QNX SDP 8.0
+series with 8.0.5 components**; the demos build with `qcc -Vgcc_ntox86_64` or
+`-Vgcc_ntoaarch64le`. The MCP process itself needs no SDK, compiler, AWS
+credentials, or application-side LLM key.
 
 ## Install and connect
 
 1. Obtain your own [QNX Everywhere SDK and license](https://www.qnx.com/products/everywhere/).
-   Build and boot a private guest using [the QEMU setup](docs/qemu.md).
+   Build and boot a private guest using [the x86_64 setup](docs/qemu.md) or
+   [the aarch64 setup](docs/qemu-aarch64.md).
 2. Inside Linux, install project dependencies with [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
    ```sh
@@ -35,7 +36,8 @@ SDK, compiler, AWS credentials, or application-side LLM key.
 
    Alternatively, use `python3 -m venv .venv` and
    `.venv/bin/python -m pip install -e .` if your Linux Python provides pip.
-3. Copy [targets/qemu.yaml](targets/qemu.yaml) to a **private file outside
+3. Copy [targets/qemu.yaml](targets/qemu.yaml) or
+   [targets/qemu-aarch64.yaml](targets/qemu-aarch64.yaml) to a **private file outside
    the repo**. Set its SSH key, verified `known_hosts` and narrow `read_roots`.
    Relative host file paths are resolved against the profile's directory.
 4. Configure your client using [Claude Desktop / VS Code instructions](docs/clients.md).
@@ -46,9 +48,10 @@ SDK, compiler, AWS credentials, or application-side LLM key.
    ```
 
 The server waits for MCP on stdin. It does not listen on a network port. With no
-`--profile`, it uses the loopback QEMU defaults shown in the sample YAML. An
-owner-selected YAML can point at another QNX 8.0 guest without code changes;
-only the local x86_64 setup has been validated for this release.
+`--profile`, it uses the loopback x86_64 QEMU defaults shown in the sample YAML.
+An owner-selected YAML can point at another QNX 8.0 target without code changes,
+but only the two local QEMU guests are validated. Real ARM hardware, other BSPs
+and big-endian targets are not.
 
 ## Tools
 
@@ -62,8 +65,7 @@ only the local x86_64 setup has been validated for this release.
 Every successful response includes a target ID, observation time, status,
 warnings and a truncation flag. `partial` means some evidence is unavailable or
 clipped; a QNX query can return exit code zero and still have permission denials.
-The parser uses the real-target-verified `%80B` width and does not invent a peer
-TID when `pidin` gives only a PID. Cross-UID visibility is restricted, and the
+The parser uses the real-target-verified `%80B` width. Cross-UID visibility is restricted, and the
 process list is not an atomic or system-wide snapshot. [QNX pidin reference](https://www.qnx.com/developers/docs/8.0/com.qnx.doc.neutrino.utilities/topic/p/pidin.html)
 
 ## Reproduce the diagnosis
@@ -72,8 +74,8 @@ Follow the [deadlock demo](examples/deadlock_demo/README.md) to build and stage
 the two programs manually. Read-only MCP calls show **A REPLY → B** and
 **B SEND → A**, plus a normal RECEIVE thread on an unrelated channel. The
 assistant can connect those observations to the callback-before-reply line in
-the source. The developer reruns in `--fixed` mode to demonstrate that
-reply-before-callback completes the request.
+the source. A manual `--fixed` rerun shows that reply-before-callback completes
+the request.
 
 Illustrative, from the synthetic fixture: trimmed `list_processes` data for
 [pidin.txt](tests/fixtures/synthetic/pidin.txt), with A as PID 701 and B as PID 804.
@@ -93,7 +95,7 @@ A's thread 2 is idle on channel 6, and `peer_tid` stays null because `pidin` giv
 The [instrument-cluster freeze](examples/cluster_freeze/README.md) simulates a
 cockpit whose radar fault freezes the whole cluster.
 
-[Manual verification](docs/manual-testing.md) describes the tested QEMU path
+[Manual verification](docs/manual-testing.md) describes the tested QEMU paths
 and the separate SDK-free checks. [Demo storyboard](docs/demo.md) is a recording
 script; no demo video is bundled. <!-- TODO: replace with the video link once the video is public. -->
 

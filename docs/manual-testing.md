@@ -126,3 +126,52 @@ buffer sets. A rerun on the same guest returned the radar's `front end lost`
 entry with `severity_max` 3, only phase markers from `qnx_mcp_cluster_fusion`,
 and the fixed run's timeouts at severity 3. No GUI client chat has been run
 against this sample yet.
+
+## aarch64 QEMU virt guest
+
+On November 19, 2026, both samples were rebuilt with
+`qcc -Vgcc_ntoaarch64le -Wall -Wextra -Werror` and run on the
+[aarch64 guest](qemu-aarch64.md) as `qnxuser`, with a temporary key and a host
+key checked against the serial console. The operator read `pidin` and
+`slog2info` directly over SSH:
+
+| Run | Operator result |
+| --- | --- |
+| Deadlock fault | A's main thread REPLY-blocked on B, B's main thread SEND-blocked on A, and A's idle thread in `RECEIVE`; both phase markers logged; the watchdog ended the run. |
+| Deadlock `--fixed` | `DEMO_OK` and exit code zero. |
+| Cluster fault | Display threads waited on `vehicle_fusion`, fusion was REPLY-blocked on `radar_svc`, and the radar sat in `RECEIVE` and `CONDVAR`; `DEMO_HANG` after the display watchdog. |
+| Cluster `--fixed` and `--healthy` | `DEMO_OK` and exit code zero. |
+
+The wait graph matched the x86_64 guest. This guest also printed `MUTEX?`.
+
+The same day, `scripts/manual_target_check.py` drove all four tools through a
+stdio MCP client on both guests with this branch's code, using builds with a
+60-second watchdog and a separate audit log per guest. On each guest, it passed
+for the deadlock fault, its `--fixed` run, the cluster fault, and the cluster's
+`--fixed` and `--healthy` runs. Each run's path denial for `/proc/boot/procnto`
+also passed. During the cluster freeze, the top `wait_analysis` end was
+`radar_svc` in `RECEIVE`, with 3 dependents, on both guests. During the
+deadlock, the README's tool claims were observed on both guests:
+
+| Tool | x86_64 QEMU | aarch64 QEMU (virt) |
+| --- | --- | --- |
+| `system_info` | `8.0.0`, machine `x86pc`, arch `x86_64`, 2 CPUs, approximate memory, SFTP available | `8.0.0`, machine `QEMU_virt`, arch `aarch64`, 2 `Cortex-A57` CPUs, approximate memory, SFTP available |
+| `list_processes` | PIDs, TIDs, states, priorities, peer PIDs and channel IDs for the three peer threads; one `possible` cycle over both peers | Same |
+| `read_system_log` | `qnx_mcp_peer_b` filter returned B's callback marker only | Same |
+| `read_file` | 512-byte page of `peer_b.c` with `next_offset` | Same |
+
+The aarch64 guest's `uname -m` prints the board name, so the server now reads
+the architecture from a separate `uname -p`. This `uname` prints `-p` with no
+separating space after other fields.
+
+Then an assistant got the deadlock prompt from the
+[sample instructions](../examples/deadlock_demo/README.md) and only the four tools,
+through a stdio client on the aarch64 guest, with a 900-second watchdog build.
+It made eight calls and reported the callback-before-reply deadlock. Its
+citations of the `MsgSend` and `MsgReply` statements in `peer_a.c` and `peer_b.c`
+matched the staged files, and it proposed replying before the callback, as the
+fixed branch does. It noted the same friction as the x86_64 runs:
+- `read_file` cannot list a directory, so it had to guess file names.
+- Peer TIDs are unknown.
+- `wait_analysis` keeps A's idle `RECEIVE` thread on another channel as a
+  candidate end.

@@ -22,17 +22,14 @@ _LOG_HEADER_LIKE = re.compile(r"^\s*\d+\.\d+\s")
 LOG_MESSAGE_LIMIT = 2048
 
 
-def parse_uname(text: str) -> tuple[str, str, str]:
+def parse_uname(text: str, processor_text: str) -> tuple[str, str, str]:
+    """`uname -m` names the board (x86pc, QEMU_virt, ...); `uname -p` names the processor."""
     fields = text.strip().split()
-    if len(fields) != 3:
-        raise ToolFailure("parse_error", "Unexpected uname -srm layout")
+    processor = processor_text.strip().split()
+    if len(fields) != 3 or len(processor) != 1:
+        raise ToolFailure("parse_error", "Unexpected uname -srm or uname -p layout")
     os_name, release, machine = fields
-    arch = {
-        "x86pc": "x86_64",
-        "x86_64": "x86_64",
-        "aarch64": "aarch64",
-        "arm64": "aarch64",
-    }.get(machine.lower())
+    arch = {"x86_64": "x86_64", "aarch64le": "aarch64"}.get(processor[0])
     if os_name != "QNX" or not re.fullmatch(r"8\.0(?:\.\d+)?", release) or arch is None:
         raise ToolFailure("unsupported_target", "Expected a recognized QNX 8.0 target")
     return release, machine, arch

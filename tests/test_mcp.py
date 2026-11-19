@@ -73,6 +73,36 @@ async def test_wait_analysis_follows_a_filtered_display_into_other_processes(set
     assert ends[0]["executable"] == "/data/demo/sensor"
 
 
+@pytest.mark.parametrize(
+    ("arch", "machine", "model"),
+    [("x86_64", "x86pc", "Fictional Model"), ("aarch64", "Imaginary_virt", "Fictional-A7")],
+)
+async def test_system_info_on_both_architectures(tmp_path, arch, machine, model):
+    backend = FakeBackend(arch)
+    audit = AuditLog(tmp_path / "audit" / "arch.jsonl")
+    other = {"x86_64": "aarch64", "aarch64": "x86_64"}[arch]
+    async with Client(create_server(TargetProfile(arch=arch), audit, backend)) as client:
+        result = await client.call_tool("system_info")
+    data = result.structured_content["data"]
+    assert not result.is_error and result.structured_content["status"] == "ok"
+    assert (data["arch"], data["machine"], data["release"]) == (arch, machine, "8.0.0")
+    assert (data["cpu_count"], data["cpu_model"]) == (2, model)
+    assert data["memory"]["total_bytes"] == {"x86_64": 512, "aarch64": 1024}[arch] * 1024**2
+    async with Client(create_server(TargetProfile(arch=other), audit, backend)) as client:
+        assert error_code(await client.call_tool("system_info")) == "unsupported_target"
+
+
+async def test_wait_analysis_on_aarch64_rows(setup):
+    backend, profile, audit = setup
+    backend.results[Command.PROCESSES] = CommandResult(fixture("pidin_aarch64.txt"))
+    async with Client(create_server(profile, audit, backend)) as client:
+        result = await client.call_tool("list_processes", {"name": "shift_panel"})
+    data = result.structured_content["data"]
+    assert [p["pid"] for p in data["processes"]] == [2203651]
+    cycle = data["wait_analysis"]["cycles"][0]
+    assert {t["pid"] for t in cycle["threads"]} == {2203651, 2207748}
+
+
 async def test_validation_and_denials_audited_before_network(setup):
     backend, profile, audit = setup
     async with Client(create_server(profile, audit, backend)) as client:
@@ -163,6 +193,8 @@ async def test_host_key_and_utility_failure_are_distinct(setup):
         assert error_code(bad) == "host_key_mismatch"
         assert "client-facing" not in str(bad.structured_content)
         backend.connect_error = None
+        backend.results[Command.PROCESSOR] = CommandResult("", "not found", 127)
+        assert error_code(await client.call_tool("system_info")) == "utility_unavailable"
         backend.results[Command.UNAME] = CommandResult("", "not found", 127)
         assert error_code(await client.call_tool("system_info")) == "utility_unavailable"
 

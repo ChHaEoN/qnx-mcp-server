@@ -85,16 +85,17 @@ async def system_info(
     profile: TargetProfile, session: Session, _: SystemArgs, record: Record
 ) -> Envelope[SystemData]:
     uname = await query(session, Command.UNAME, record)
-    release, machine, arch = parse_uname(uname.stdout)
+    processor = await query(session, Command.PROCESSOR, record)
+    release, machine, arch = parse_uname(uname.stdout, processor.stdout)
     if arch != profile.arch:
         raise ToolFailure(
             "unsupported_target", "QNX machine architecture does not match its profile"
         )
-    warnings = command_warnings(uname)
+    warnings = command_warnings(uname) + command_warnings(processor)
     cpu_count = cpu_model = None
     memory = Memory()
     pidin = None
-    truncated = uname.truncated
+    truncated = uname.truncated or processor.truncated
     try:
         info = await query(session, Command.INFO, record)
         pidin = True

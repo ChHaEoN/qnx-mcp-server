@@ -11,6 +11,26 @@ def fixture(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
+# Synthetic `uname -srm`, `uname -p` and `pidin info`; aarch64 follows a QEMU virt guest layout.
+SYSTEM_OUTPUT = {
+    "x86_64": (
+        "QNX 8.0.0 x86pc\n",
+        "x86_64\n",
+        "CPU:X86_64 Release:8.0.0 FreeMem:128MB/512MB\n"
+        "Processor1: 45 Fictional Model 100MHz FPU\n"
+        "Processor2: 45 Fictional Model 100MHz FPU\n",
+    ),
+    "aarch64": (
+        "QNX 8.0.0 Imaginary_virt\n",
+        "aarch64le\n",
+        "CPU:AARCH64 Release:8.0.0  FreeMem:700MB/1024MB BootTime:Jan 01 00:00:00 UTC 2026\n"
+        "Processes: 3, Threads: 3\n"
+        "Processor1: 1234567890 Fictional-A7 0MHz FPU \n"
+        "Processor2: 1234567890 Fictional-A7 0MHz FPU \n",
+    ),
+}
+
+
 class FakeFiles:
     def __init__(self):
         self.entries = {
@@ -42,14 +62,12 @@ class FakeFiles:
 class FakeBackend:
     fingerprint = "SHA256:synthetic-test"
 
-    def __init__(self):
+    def __init__(self, arch: str = "x86_64"):
+        uname, processor, info = SYSTEM_OUTPUT[arch]
         self.results = {
-            Command.UNAME: CommandResult("QNX 8.0.0 x86pc\n"),
-            Command.INFO: CommandResult(
-                "CPU:X86_64 Release:8.0.0 FreeMem:128MB/512MB\n"
-                "Processor1: 45 Fictional Model 100MHz FPU\n"
-                "Processor2: 45 Fictional Model 100MHz FPU\n"
-            ),
+            Command.UNAME: CommandResult(uname),
+            Command.PROCESSOR: CommandResult(processor),
+            Command.INFO: CommandResult(info),
             Command.PROCESSES: CommandResult(
                 fixture("pidin.txt"), "fixture: Operation not permitted"
             ),
