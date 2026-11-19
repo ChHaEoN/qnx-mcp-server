@@ -101,8 +101,9 @@ leave the sources out of the attachments and approve each read:
 > `qnx_mcp_cluster_radar` and `qnx_mcp_cluster_heartbeat`. Separate observed
 > thread states from inferences and cite the source statements.
 
-`read_file` cannot list a directory, so the prompt names the files and buffer
-sets.
+The prompt names the files and buffer sets to save calls. `read_file` on the
+staged directory also lists its files, and its `first_line` and `line_numbers`
+let the assistant cite source lines without counting them.
 
 `list_processes` with name `cluster_display` returns the display threads and a
 `wait_analysis` that follows their waits into the other processes. It ranks the

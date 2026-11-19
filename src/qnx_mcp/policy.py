@@ -19,15 +19,18 @@ def remote_path(value: str) -> PurePosixPath:
     return PurePosixPath(value)
 
 
-def require_read_path(value: str, roots: tuple[str, ...]) -> PurePosixPath:
+def require_read_path(
+    value: str, roots: tuple[str, ...], *, allow_root: bool = False
+) -> PurePosixPath:
+    """Files must lie strictly inside a root; a directory listing may also name the root."""
     try:
         path = remote_path(value)
     except ValueError as exc:
         raise ToolFailure("path_denied", str(exc)) from None
     if any(path.is_relative_to(root) for root in DENIED_ROOTS) or not any(
-        path.is_relative_to(root) and path != PurePosixPath(root) for root in roots
+        path.is_relative_to(root) and (allow_root or path != PurePosixPath(root)) for root in roots
     ):
-        raise ToolFailure("path_denied", "File must be inside an approved read directory")
+        raise ToolFailure("path_denied", "Path must be inside an approved read directory")
     return path
 
 

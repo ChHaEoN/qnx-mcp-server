@@ -126,3 +126,24 @@ buffer sets. A rerun on the same guest returned the radar's `front end lost`
 entry with `severity_max` 3, only phase markers from `qnx_mcp_cluster_fusion`,
 and the fixed run's timeouts at severity 3. No GUI client chat has been run
 against this sample yet.
+
+## Directory listing and line numbers
+
+On November 17, 2026, `read_file` was checked through a stdio client on the
+same QEMU guest as `qnxuser`, with the cluster sample staged and a test symlink
+added to its directory:
+
+- Listing the read root returned its `cluster` directory. Listing `cluster`
+  returned the binaries, sources and symlink sorted by name, with file sizes.
+  The symlink was reported as `symlink`, and reading it returned `path_denied`.
+- Listing the root's parent was denied before the server contacted the target.
+- A page of `vehicle_fusion.c` that starts at a line boundary reported the same
+  `first_line` as the local copy. `line_numbers` numbered the page from there.
+- The audit log contained no entry names, paths or file contents.
+
+On November 19, 2026, the same checks passed on the aarch64 QEMU virt guest
+with the aarch64 build of the cluster sample. The listing sizes matched the local
+binaries and sources, and a listing `offset` of 5 started at the sixth name. A
+mid-line offset reported the line that contains it. On this branch alone,
+`system_info` still rejects that guest as `unsupported_target`, because the
+`uname -p` change for aarch64 is not here yet.

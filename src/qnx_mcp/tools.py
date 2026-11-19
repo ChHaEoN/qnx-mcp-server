@@ -15,6 +15,7 @@ from .parsers import parse_info, parse_logs, parse_processes, parse_uname
 from .policy import remote_path, require_read_path, safe_text
 from .schemas import (
     Capabilities,
+    DirectoryEntry,
     Envelope,
     FileArgs,
     FileData,
@@ -26,11 +27,18 @@ from .schemas import (
     SystemArgs,
     SystemData,
 )
-from .transport import Command, CommandResult, Session
+from .transport import Command, CommandResult, Files, Session
 from .waits import analyze_waits
 
 Record = Callable[..., None]
 _PERMISSION = re.compile("operation not permitted|permission denied|access denied", re.I)
+
+# Directory listings: entries per page, and how many names one call reads before it stops.
+DIRECTORY_PAGE = 200
+DIRECTORY_SCAN_LIMIT = 2000
+# first_line counts newlines before the offset, reading at most this many bytes in chunks.
+LINE_SCAN_LIMIT = 1024 * 1024
+LINE_SCAN_CHUNK = 256 * 1024
 
 
 def command_warnings(result: CommandResult) -> list[str]:
@@ -207,10 +215,95 @@ async def read_system_log(
     )
 
 
+async def require_canonical(
+    files: Files, path: PurePosixPath, roots: tuple[str, ...], *, allow_root: bool
+) -> PurePosixPath:
+    try:
+        canonical = remote_path(await files.realpath(str(path)))
+    except ValueError:
+        raise ToolFailure("path_denied", "Invalid SFTP canonical path") from None
+    if canonical != path:
+        raise ToolFailure("path_denied", "SFTP canonical path differs from the requested path")
+    return require_read_path(str(canonical), roots, allow_root=allow_root)
+
+
+async def complete_read(files: Files, path: str, offset: int, size: int) -> bytes:
+    blob = await files.read(path, offset, size)
+    if len(blob) != size:
+        raise ToolFailure(
+            "target_error", "File changed or returned an incomplete read", retryable=True
+        )
+    return blob
+
+
+async def line_at(files: Files, path: str, offset: int, record: Record) -> int | None:
+    """1-based line of the byte at `offset`, or None when the prefix exceeds the scan cap."""
+    if offset > LINE_SCAN_LIMIT:
+        return None
+    if offset:
+        record("sftp_line_scan", bytes=offset)
+    newlines = position = 0
+    while position < offset:
+        size = min(LINE_SCAN_CHUNK, offset - position)
+        newlines += (await complete_read(files, path, position, size)).count(b"\n")
+        position += size
+    return newlines + 1
+
+
+def number_lines(text: str, first: int) -> str:
+    """cat -n style numbering; a final partial line is numbered, a final newline is kept."""
+    lines = text.split("\n")
+    ended = lines[-1] == ""
+    if ended:
+        lines.pop()
+    body = "\n".join(f"{first + i:>6}\t{line}" for i, line in enumerate(lines))
+    return body + ("\n" if ended and lines else "")
+
+
+async def list_directory(
+    profile: TargetProfile, files: Files, path: PurePosixPath, args: FileArgs, record: Record
+) -> Envelope[FileData]:
+    record("sftp_list", offset=args.offset)
+    raw, more = await files.listdir(str(path), DIRECTORY_SCAN_LIMIT)
+    ordered = sorted(raw, key=lambda item: item[0])
+    page = ordered[args.offset : args.offset + DIRECTORY_PAGE]
+    end = args.offset + len(page)
+    last_page = end >= len(ordered)
+    warnings = []
+    if more:
+        warnings.append(
+            f"Directory has more than {DIRECTORY_SCAN_LIMIT} entries; only the first "
+            f"{DIRECTORY_SCAN_LIMIT} read were sorted and listed"
+        )
+    eof = last_page and not more
+    return result_for(
+        profile,
+        FileData(
+            path=str(path),
+            kind="directory",
+            content="",
+            bytes_read=0,
+            next_offset=None if last_page else end,
+            eof=eof,
+            entries=[
+                DirectoryEntry(
+                    name=safe_text(name),
+                    type=entry.kind,
+                    size=entry.size if entry.kind == "file" else None,
+                )
+                for name, entry in page
+            ],
+            total_entries=None if more else len(ordered),
+        ),
+        warnings,
+        truncated=not eof,
+    )
+
+
 async def read_file(
     profile: TargetProfile, session: Session, args: FileArgs, record: Record
 ) -> Envelope[FileData]:
-    path = require_read_path(args.path, profile.read_roots)
+    path = require_read_path(args.path, profile.read_roots, allow_root=True)
     record("sftp_read", offset=args.offset, max_bytes=args.max_bytes)
     async with session.files() as files:
         for directory in reversed(path.parents):
@@ -219,45 +312,53 @@ async def read_file(
             if (await files.lstat(str(directory))).kind != "directory":
                 raise ToolFailure("path_denied", "Every path component must be a real directory")
         entry = await files.lstat(str(path))
+        if entry.kind == "directory":
+            await require_canonical(files, path, profile.read_roots, allow_root=True)
+            return await list_directory(profile, files, path, args, record)
         if entry.kind != "file" or entry.size is None or entry.size < 0:
-            raise ToolFailure("path_denied", "Only regular files with a known size may be read")
-        try:
-            canonical = remote_path(await files.realpath(str(path)))
-        except ValueError:
-            raise ToolFailure("path_denied", "Invalid SFTP canonical path") from None
-        if canonical != path:
-            raise ToolFailure("path_denied", "SFTP canonical path differs from the requested path")
-        require_read_path(str(canonical), profile.read_roots)
+            raise ToolFailure(
+                "path_denied", "Only regular files with a known size and directories may be read"
+            )
+        canonical = await require_canonical(files, path, profile.read_roots, allow_root=False)
         if args.offset >= entry.size:
             return result_for(
                 profile,
                 FileData(path=str(path), content="", bytes_read=0, next_offset=None, eof=True),
             )
         size = min(entry.size - args.offset, args.max_bytes)
-        blob = await files.read(str(canonical), args.offset, size)
-        if len(blob) != size:
+        blob = await complete_read(files, str(canonical), args.offset, size)
+        eof = args.offset + len(blob) >= entry.size
+        if b"\x00" in blob:
+            raise ToolFailure("invalid_text", "File contains NUL bytes")
+        decoder = codecs.getincrementaldecoder("utf-8")()
+        try:
+            text = decoder.decode(blob, final=eof)
+        except UnicodeDecodeError:
             raise ToolFailure(
-                "target_error", "File changed or returned an incomplete read", retryable=True
-            )
-    eof = args.offset + len(blob) >= entry.size
-    if b"\x00" in blob:
-        raise ToolFailure("invalid_text", "File contains NUL bytes")
-    decoder = codecs.getincrementaldecoder("utf-8")()
-    try:
-        text = decoder.decode(blob, final=eof)
-    except UnicodeDecodeError:
-        raise ToolFailure(
-            "invalid_text", "Expected UTF-8 text at the requested byte offset"
-        ) from None
+                "invalid_text", "Expected UTF-8 text at the requested byte offset"
+            ) from None
+        first_line = await line_at(files, str(canonical), args.offset, record)
     read = len(blob) - len(decoder.getstate()[0])
+    content = safe_text(text)
+    warnings = []
+    if first_line is None:
+        warnings.append(
+            f"Line number unknown beyond the first {LINE_SCAN_LIMIT} bytes; cite byte offsets"
+        )
+        if args.line_numbers:
+            warnings.append("line_numbers was ignored because the line number is unknown")
+    numbered = args.line_numbers and first_line is not None
     return result_for(
         profile,
         FileData(
             path=str(path),
-            content=safe_text(text),
+            content=number_lines(content, first_line) if numbered else content,
             bytes_read=read,
+            first_line=first_line,
+            numbered=numbered,
             next_offset=None if eof else args.offset + read,
             eof=eof,
         ),
+        warnings,
         truncated=not eof,
     )

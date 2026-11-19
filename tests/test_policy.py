@@ -24,6 +24,15 @@ def test_read_path_lexical_denial(path):
         require_read_path(path, ("/data/demo",))
 
 
+def test_approved_root_itself_is_allowed_only_when_asked():
+    with pytest.raises(ToolFailure, match="approved"):
+        require_read_path("/data/demo", ("/data/demo",))
+    allowed = require_read_path("/data/demo", ("/data/demo",), allow_root=True)
+    assert str(allowed) == "/data/demo"
+    with pytest.raises(ToolFailure, match="approved"):
+        require_read_path("/data", ("/data/demo",), allow_root=True)
+
+
 def test_config_rejects_ambiguous_or_broad_policy(tmp_path: Path):
     profile = tmp_path / "invalid.yaml"
     profile.write_text("port: 22\nport: 22222\n", encoding="utf-8")

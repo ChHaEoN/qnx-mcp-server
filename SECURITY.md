@@ -15,10 +15,13 @@ command flags. Filter arguments are applied on the host.
   The server escapes terminal controls; it cannot keep a model from being
   persuaded by malicious text. Returned contents may reach a model provider.
 - **File reads:** allow-listed POSIX roots, component-wise SFTP `lstat` and
-  `realpath` containment checks, and bounded UTF-8 reads. Reject traversal,
-  symlinks, special files, `/dev` and `/proc`. Check/open is not atomic:
-  symlink and replacement races remain possible. Keep roots narrow and
-  free of untrusted concurrent writers and secrets.
+  `realpath` containment checks, bounded UTF-8 reads and bounded directory
+  listings. Reject traversal, symlinks, special files, `/dev` and `/proc`.
+  A listing of a root or of a directory inside it reveals entry names, types
+  and file sizes; symlinks appear as entries and are never followed. Check/open
+  is not atomic: symlink and replacement races remain possible. Keep roots
+  narrow and free of untrusted concurrent writers and secrets, including files
+  whose names alone are sensitive.
 - **Audit:** local protected JSONL, default
   `$XDG_STATE_HOME/qnx-mcp/audit.jsonl` or
   `~/.local/state/qnx-mcp/audit.jsonl`. The server records dispatched calls,

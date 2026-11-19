@@ -4,7 +4,7 @@ import asyncio
 import shlex
 import stat
 from collections.abc import AsyncIterator
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import AbstractAsyncContextManager, aclosing, asynccontextmanager
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -56,6 +56,7 @@ class Files(Protocol):
     async def lstat(self, path: str) -> Entry: ...
     async def realpath(self, path: str) -> str: ...
     async def read(self, path: str, offset: int, size: int) -> bytes: ...
+    async def listdir(self, path: str, limit: int) -> tuple[list[tuple[str, Entry]], bool]: ...
 
 
 class Session(Protocol):
@@ -69,26 +70,38 @@ class Backend(Protocol):
     def connect(self) -> AbstractAsyncContextManager[Session]: ...
 
 
+def entry_from(attrs: asyncssh.SFTPAttrs) -> Entry:
+    """Classify lstat-style attributes; a symlink is reported, never followed."""
+    mode = attrs.permissions
+    if attrs.type == asyncssh.FILEXFER_TYPE_SYMLINK or (mode is not None and stat.S_ISLNK(mode)):
+        return Entry("symlink")
+    if attrs.type == asyncssh.FILEXFER_TYPE_DIRECTORY or (mode is not None and stat.S_ISDIR(mode)):
+        return Entry("directory")
+    if attrs.type == asyncssh.FILEXFER_TYPE_REGULAR or (mode is not None and stat.S_ISREG(mode)):
+        return Entry("file", attrs.size)
+    return Entry("other")
+
+
 class SFTPFiles:
     def __init__(self, client: asyncssh.SFTPClient):
         self.client = client
 
     async def lstat(self, path: str) -> Entry:
-        attrs = await self.client.lstat(path)
-        mode = attrs.permissions
-        if attrs.type == asyncssh.FILEXFER_TYPE_SYMLINK or (
-            mode is not None and stat.S_ISLNK(mode)
-        ):
-            return Entry("symlink")
-        if attrs.type == asyncssh.FILEXFER_TYPE_DIRECTORY or (
-            mode is not None and stat.S_ISDIR(mode)
-        ):
-            return Entry("directory")
-        if attrs.type == asyncssh.FILEXFER_TYPE_REGULAR or (
-            mode is not None and stat.S_ISREG(mode)
-        ):
-            return Entry("file", attrs.size)
-        return Entry("other")
+        return entry_from(await self.client.lstat(path))
+
+    async def listdir(self, path: str, limit: int) -> tuple[list[tuple[str, Entry]], bool]:
+        """Up to `limit` entries in server order, and whether more exist. Names stay bytes on
+        the wire and are decoded leniently, so one odd name cannot fail the whole listing."""
+        entries: list[tuple[str, Entry]] = []
+        async with aclosing(self.client.scandir(path.encode())) as names:
+            async for name in names:
+                raw = name.filename
+                if not isinstance(raw, bytes) or raw in (b".", b".."):
+                    continue
+                if len(entries) == limit:
+                    return entries, True
+                entries.append((raw.decode("utf-8", "backslashreplace"), entry_from(name.attrs)))
+        return entries, False
 
     async def realpath(self, path: str) -> str:
         resolved = await self.client.realpath(path)
